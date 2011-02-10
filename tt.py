@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.6
+#!/usr/bin/env python2.7
 #
 # Webscrape the ridiculous UNott timetable website into something
 # readable, and provide a useful interface.
@@ -20,16 +20,9 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
 # USA.
 
-import sys, getopt, pprint, urllib, textwrap
-import simplejson as json
-
-import html5lib
-from html5lib import sanitizer
-from html5lib import treebuilders
-from xml.etree import cElementTree as et
+import sys, getopt, pprint, urllib, textwrap, scraper, json
 
 ACTIVITY_TYPES = ['Lecture', 'Computing']
-TAG_NS = "http://www.w3.org/1999/xhtml"
 TT_URL = "http://uiwwwsci01.ad.nottingham.ac.uk:8003/reporting/Spreadsheet"
 ## TT_URL = "http://localhost:8003/reporting/Spreadsheet"
 MODULES_URL = "Modules;name;%(modules)s?template=SWSCUST+Module+Spreadsheet&weeks=1-52"
@@ -49,7 +42,6 @@ Courses = {
 ## : mort@greyjay:~$; curl -v --post302 -i -L -X POST -d"year_id=000110" -d"mnem=G54TCN"
 MODULE_DETAIL_URL = "http://modulecatalogue.nottingham.ac.uk/Nottingham/asp/FindModule.asp"
 
-def tag(t): return "{%s}%s" % (TAG_NS, t)
 def spelling(s):
     ## ye gods.
     return s.replace("Activiity", "Activity")
@@ -82,32 +74,13 @@ Courses shortcuts are [%s].
     """ % (err, sys.argv[0], ", ".join(ACTIVITY_TYPES), ", ".join(Courses.keys())))
     sys.exit(code)
 
-def decode(bytes):
-    try: page = bytes.decode("utf8")
-    except UnicodeDecodeError, ue:
-        page = bytes.decode("latin1")
-    return page
-
-def fetch(url, data=None):
-    f = urllib.urlopen(url, data, proxies={})
-    headers = f.info().items()
-    bytes = f.read()
-    ct = headers['content-type'] if ('content-type' in headers) else ""
-    page = bytes.decode("latin1") if ("charset=ISO-8859-1" in ct) else decode(bytes)
-    return (page, headers)
-
-def parse(page):
-    parser = html5lib.HTMLParser(tree=treebuilders.getTreeBuilder("etree", et),
-                                 tokenizer=sanitizer.HTMLSanitizer)
-    return parser.parse(page)
-
 def scrape_module_details(doc):
     SKILLS = ('Intellectual Skills',
               'Professional Skills',
               'Transferable Skills',)
     details = {}
     outcomes = False
-    ps = doc.getiterator(tag("p"))
+    ps = doc.getiterator(scraper.tag("p"))
     for p in ps:
         for c in p.getchildren():
             if c.tail and c.text:
@@ -142,7 +115,7 @@ def scrape_module_details(doc):
 def scrape_timetable(doc):
     modules = []
     module = {}
-    tables = doc.getiterator(tag("table"))
+    tables = doc.getiterator(scraper.tag("table"))
     for table in tables:
         attrs = set(table.items())
         if attrs == set([ ("width", "100%"), ("border", "0"), ]):
@@ -151,7 +124,7 @@ def scrape_timetable(doc):
                 modules.append(module)
                 module = {}
 
-            bolds = list(table.getiterator(tag("b")))
+            bolds = list(table.getiterator(scraper.tag("b")))
             if len(bolds) == 0: continue ## not a heading
 
             module_title = bolds[0].text
@@ -168,7 +141,7 @@ def scrape_timetable(doc):
 
         elif attrs == set([ ("cellspacing", "0"), ("cellpadding", "2%"), ("border", "1"), ]):
             ## timetable block
-            rows = list(table.getiterator(tag("tr")))
+            rows = list(table.getiterator(scraper.tag("tr")))
             hrow = map(lambda e:spelling(e.text), rows[0].getchildren())
             for row in rows[1:]:
                 activity = dict(zip(hrow, map(lambda c:c.text, row)))
@@ -226,15 +199,15 @@ if __name__ == '__main__':
 
     ## fetch module data, with details if desired
     if not (courses or modules): die_with_usage("", 1)
-    modules = scrape_timetable(parse(fetch(url)[0]))
+    modules = scrape_timetable(scraper.parse(scraper.fetch(url)[0]))
 
     if module_detail:
         for m in modules:
             data = { 'year_id': '000110',
                      'mnem': m['code'],
                      }
-            page, hdrs = fetch(MODULE_DETAIL_URL, urllib.urlencode(data))
-            m['detail'] = scrape_module_details(parse(page))
+            page, hdrs = scraper.fetch(MODULE_DETAIL_URL, data)
+            m['detail'] = scrape_module_details(scraper.parse(page))
 
     ## dump scraped data; yes, i know i should factor out formatting
     ## and output
