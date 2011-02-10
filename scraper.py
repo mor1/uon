@@ -57,4 +57,4 @@ def parse(page):
     return parser.parse(page)
 
 def path(*elts):
-    return ".//%s" % "/".join([ tag(e) for e in elts ])
+    return ".//%s" % "//".join([ tag(e) for e in elts ])

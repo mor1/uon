@@ -213,7 +213,7 @@ if __name__ == '__main__':
     ## and output
     if dump_ascii:
         for module in modules:
-            print module['code'], "--", module['title']
+            print "\x1b[0;1m%s\x1b[0m" % module['code'], "--", module['title']
             for (act, data) in sorted(module['acts'].items()):
                 print "\t%-13s" % (act,), \
                       "%s %5s--%5s" % (data['Day'][0][:2], data['Start'][0], data['End'][0],), \
@@ -243,7 +243,7 @@ if __name__ == '__main__':
         \x1b[0;1mSkills:\x1b[0m
         %(Professional Skills)s %(Intellectual Skills)s %(Transferable Skills)s
 """ % module['detail']
-                print textwrap.fill(s, subsequent_indent="\t", replace_whitespace=False)
+                print textwrap.fill(s, subsequent_indent="\t", replace_whitespace=False), "\n"
 
     elif dump_json:
         print json.dumps(modules)

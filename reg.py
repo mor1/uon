@@ -19,19 +19,25 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
 # USA.
 
-import sys, getopt, urllib, scraper, pprint
+import sys, getopt, urllib, scraper, pprint, json
 
 LOGIN_FORM = 'https://saturnweb.nottingham.ac.uk/Nottingham/asp/logon_saturn_frame.asp' 
 LOGIN_CONFIRM = 'https://saturnweb.nottingham.ac.uk/Nottingham/asp/logon.asp' 
 SEARCH_URL = 'https://saturnweb.nottingham.ac.uk/Nottingham/asp/search_students.asp' 
+
+DEFAULT_YEAR = '2010'
 
 def die_with_usage(err="Usage: ", code=0):
     print """ERROR: %s
 %s [modules]:
   -h/--help            : print this message
   -a/--ascii           : output ASCII
-  -j/--json            : output JSON
-    """ % (err, sys.argv[0], )
+  -j/--json            : output JSON  
+
+  -u/--username <u>    : SaturnWeb username <u>
+  -p/--password <p>    : SaturnWeb password <p>
+  -y/--year <y>        : Year (2010, 2011, ...; default:%s)
+    """ % (err, sys.argv[0], DEFAULT_YEAR)
     sys.exit(code)
 
 def login(username, password):
@@ -56,6 +62,7 @@ def scrape_register(cookies, module, year_id):
         )
 
     doc = scraper.parse(page)
+##     print page
     title = doc.find(scraper.path("h4", "a")).text
 
     for table in doc.findall(scraper.path("table")):
@@ -63,11 +70,23 @@ def scrape_register(cookies, module, year_id):
             headings = [ t.text for t in table.findall(scraper.path("th", "font", "b")) ]
             if headings != [ 'Name', 'Category', 'Course', 'Misc' ]: BARF
 
-            return (title,
-                    [ tuple([c.text.strip()
-                             for c in row.findall(scraper.path("td", "font"))])
-                      for row in table.findall(scraper.path("tr"))[1:] ])
-                
+##             for row in table.findall(scraper.path("tr"))[1:]:
+##                 for c in row.findall(scraper.path("td", "font")):
+##                     print c, c.text, c.tail
+
+            students = [
+                dict(zip(headings[:-1],
+                         (c.text.strip()
+                          for c in row.findall(scraper.path("td", "font"))
+                          if c.text)))
+                for row in table.findall(scraper.path("tr"))[1:]
+                ]
+
+            return {
+                'title': title,
+                'students': students,
+                }
+        
 if __name__ == '__main__':
 
     YID = {
@@ -97,19 +116,21 @@ if __name__ == '__main__':
             elif o in ("-j", "--json"): dump_json = True
             elif o in ("-u", "--username"): username = a
             elif o in ("-p", "--password"): password = a
-            elif o in ("-y", "--year_id"): year_id = YID[a]
+            elif o in ("-y", "--year"): year_id = YID[a]
             else: raise Exception("unhandled option")
     except Exception, err: raise ; die_with_usage()
 
     modules = args
     if not (username and password): die_with_usage("must supply username and password", 1)
     if not modules: die_with_usage("must specific module mnemonic(s)", 2)
-    if not year_id: year_id = YID['2010']
+    if not year_id: year_id = YID[DEFAULT_YEAR]
     if not (dump_ascii or dump_json): dump_ascii = True
 
     cookies = login(username, password)
     for module in modules:
         register = scrape_register(cookies, module, year_id)
-        print "\x1b[0;1m%s\x1b[0m [%d]" % (register[0], len(register[1]))
-        for s in register[1]:
-            print "\t", "\t".join(s)
+        if dump_json: print json.dumps(register)
+        elif dump_ascii:
+            print "\x1b[0;1m%s\x1b[0m [%d]" % (register['title'], len(register['students']))
+            for s in register['students']:
+                print "\t", "\t".join(s.values())
