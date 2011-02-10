@@ -98,7 +98,7 @@ if __name__ == '__main__':
     
     ## option parsing
     pairs = [ "h/help", "j/json", "a/ascii",
-              "u:/username=", "p:/password=", "y:/year_id=",
+              "u:/username=", "p:/password=", "y:/year=",
               ]
     shortopts = "".join([ pair.split("/")[0] for pair in pairs ])
     longopts = [ pair.split("/")[1] for pair in pairs ]
