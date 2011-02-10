@@ -84,7 +84,7 @@ Courses shortcuts are [%s].
 
 def decode(bytes):
     try: page = bytes.decode("utf8")
-    except UnicodeDecodeError, ude:
+    except UnicodeDecodeError, ue:
         page = bytes.decode("latin1")
     return page
 
@@ -102,12 +102,41 @@ def parse(page):
     return parser.parse(page)
 
 def scrape_module_details(doc):
+    SKILLS = ('Intellectual Skills',
+              'Professional Skills',
+              'Transferable Skills',)
+    details = {}
+    outcomes = False
     ps = doc.getiterator(tag("p"))
-    pprint.pprint([ c.tail for p in ps for c in p.getchildren() if c ])
+    for p in ps:
+        for c in p.getchildren():
+            if c.tail and c.text:
+                details[c.text.strip().strip(":")] = c.tail.strip()
+            elif c.tail:
+                cts = c.tail.strip()
+                if not outcomes: continue
+                
+                if ("Knowledge and Understanding" in details
+                    and not details['Knowledge and Understanding']):
+                    if not cts.endswith("."): cts += "."
+                    details['Knowledge and Understanding'] = cts
+                elif cts.startswith("Knowledge and Understanding"):
+                    details['Knowledge and Understanding'] = None
 
-    details = dict([ (c.text.strip().strip(":"),c.tail.strip())
-                     for p in ps for c in p.getchildren() if c.text and c.tail ])
+                else:
+                    for k in SKILLS:
+                        if k in details and len(details[k]) == 0:
+                            details[k] = cts
+                        elif cts.startswith(k):
+                            details[k] = cts.lstrip("%s[.:] " % k)
 
+            elif c.text:
+                if c.text.strip().startswith("Learning Outcomes"):
+                    outcomes = True
+
+    for k in SKILLS:
+        if k in details and not details[k].endswith("."): details[k] += "."
+        elif k not in details: details[k] = '[No %s listed.]' % (k.lower(),)
     return details
 
 def scrape_timetable(doc):
@@ -139,7 +168,6 @@ def scrape_timetable(doc):
 
         elif attrs == set([ ("cellspacing", "0"), ("cellpadding", "2%"), ("border", "1"), ]):
             ## timetable block
-
             rows = list(table.getiterator(tag("tr")))
             hrow = map(lambda e:spelling(e.text), rows[0].getchildren())
             for row in rows[1:]:
@@ -201,14 +229,12 @@ if __name__ == '__main__':
     modules = scrape_timetable(parse(fetch(url)[0]))
 
     if module_detail:
-        durl = MODULE_DETAIL_URL
         for m in modules:
             data = { 'year_id': '000110',
                      'mnem': m['code'],
                      }
-            page, hdrs = fetch(durl, urllib.urlencode(data))
+            page, hdrs = fetch(MODULE_DETAIL_URL, urllib.urlencode(data))
             m['detail'] = scrape_module_details(parse(page))
-
 
     ## dump scraped data; yes, i know i should factor out formatting
     ## and output
@@ -229,16 +255,7 @@ if __name__ == '__main__':
                         print "%02d," % (int(week[0]),),
                 print ")"
             if 'detail' in module:
-                try:
-                    for k in ('Knowledge and Understanding',
-                              'Professional Skills',
-                              'Intellectual Skills',
-                              'Transferable Skills',
-                              'Education Aims',
-                              ):
-                        if k not in module['detail']:
-                            module['detail'][k] = ""
-                    s = """
+                s = """
         %(Level)s.  Credits:%(Total Credits)s.
 
         \x1b[0;1mTarget Students:\x1b[0m
@@ -247,15 +264,13 @@ if __name__ == '__main__':
         \x1b[0;1mAims:\x1b[0m
         %(Education Aims)s
 
-        \x1b[0;1mResults:\x1b[0m
+        \x1b[0;1mUnderstanding:\x1b[0m
         %(Knowledge and Understanding)s
 
         \x1b[0;1mSkills:\x1b[0m
         %(Professional Skills)s %(Intellectual Skills)s %(Transferable Skills)s
 """ % module['detail']
-                    print textwrap.fill(s, subsequent_indent="\t", replace_whitespace=False)
-                except KeyError, ke:
-                    print "%s.\n%s" % (ke, pprint.pformat(module['detail']))
+                print textwrap.fill(s, subsequent_indent="\t", replace_whitespace=False)
 
     elif dump_json:
         print json.dumps(modules)
