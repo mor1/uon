@@ -53,6 +53,8 @@ def format_weeks(s):
     return map(_split, s.split(","))
 
 def format_staff(s):
+    if isinstance(s, (list,tuple)): return "; ".join(map(format_staff, s))
+    
     ss = s.split()
     if len(ss) <= 2: return "unk"
 
@@ -154,6 +156,11 @@ def scrape_timetable(doc):
                     for (k,v) in activity.items():
                         if v not in module['acts'][a][k]: module['acts'][a][k].append(v)
 
+            for a in module['acts']:
+                for k in module['acts'][a]:
+                    if len(module['acts'][a][k]) == 1:
+                        module['acts'][a][k] = module['acts'][a][k][0]
+                        
         else: pass
 
     return modules
@@ -197,10 +204,10 @@ if __name__ == '__main__':
         modules = "%0D%0A".join(args)
         url = "%s;%s" % (TT_URL, MODULES_URL % { "modules": modules, })
 
-    ## fetch module data, with details if desired
     if not (courses or modules): die_with_usage("", 1)
+    
+    
     modules = scrape_timetable(scraper.parse(scraper.fetch(url)[0]))
-
     if module_detail:
         for m in modules:
             data = { 'year_id': '000110',
@@ -209,18 +216,18 @@ if __name__ == '__main__':
             page, hdrs = scraper.fetch(MODULE_DETAIL_URL, data)
             m['detail'] = scrape_module_details(scraper.parse(page))
 
-    ## dump scraped data; yes, i know i should factor out formatting
-    ## and output
-    if dump_ascii:
+    ## dump scraped data
+    if dump_json: print json.dumps(modules)
+    elif dump_ascii:
         for module in modules:
             print "\x1b[0;1m%s\x1b[0m" % module['code'], "--", module['title']
             for (act, data) in sorted(module['acts'].items()):
                 print "\t%-13s" % (act,), \
-                      "%s %5s--%5s" % (data['Day'][0][:2], data['Start'][0], data['End'][0],), \
-                      "%-16s" % (data['Room'][0],), \
-                      "[ %s ]" % ("; ".join(map(format_staff, data['Staff']))), \
+                      "%s %5s--%5s" % (data['Day'][:2], data['Start'], data['End'],), \
+                      "%-16s" % (data['Room'],), \
+                      "[ %s ]" % (format_staff(data['Staff'])), \
                       "(weeks",
-                weeks = format_weeks(data['Weeks'][0])
+                weeks = format_weeks(data['Weeks'])
                 for week in weeks:
                     if len(week) == 4:
                         print "%02d-%02d," % (int(week[0]), int(week[2])),
@@ -244,6 +251,3 @@ if __name__ == '__main__':
         %(Professional Skills)s %(Intellectual Skills)s %(Transferable Skills)s
 """ % module['detail']
                 print textwrap.fill(s, subsequent_indent="\t", replace_whitespace=False), "\n"
-
-    elif dump_json:
-        print json.dumps(modules)
